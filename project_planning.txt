@@ -1,0 +1,279 @@
+----------------------------------------------------------------------------------------------------
+|                                         PROJECT PLANNING                                         |
+----------------------------------------------------------------------------------------------------
+
+File Structure
+
+bank-account-system/
+├── main.py
+├── models/
+│   ├── __init__.py
+│   ├── transaction.py
+│   ├── account.py
+│   ├── savings_account.py
+│   ├── current_account.py
+│   └── bank.py
+├── exceptions.py
+├── security.py
+├── utils.py
+├── data/
+│   └── bank.json
+├── .gitignore
+├── README.md
+└── LICENSE
+
+What Each File Contains
+
+exceptions.py — all four custom exception classes. Build this first since every other file imports from it.
+security.py — PIN hashing and verification using hashlib. Built second since account.py depends on it.
+utils.py — formatting helpers for currency, dates and bank statement output. No dependencies on other project files.
+models/transaction.py — the Transaction class. No dependencies on other models. Built third.
+models/account.py — the BankAccount base class. Imports Transaction, exceptions and security. Built fourth.
+models/savings_account.py — SavingsAccount inheriting from BankAccount. Built fifth.
+models/current_account.py — CurrentAccount inheriting from BankAccount. Built sixth.
+models/bank.py — the Bank class. Imports all account types. Built seventh.
+models/__init__.py — imports all classes so the rest of the project can use clean single-line imports.
+main.py — CLI menu loop. Built last when everything else works.
+
+exceptions.py — Full Instructions
+Four classes, all inheriting from Exception. Each one should have a custom __init__ that stores a message and passes it to super().__init__(), and a __str__ that returns that message clearly.
+AuthenticationError — raised when a PIN is wrong. Message should include how many attempts remain if you implement attempt limiting.
+InsufficientFundsError — raised when a withdrawal would take balance below zero (or below minimum for savings). Message should include the current balance and the amount attempted.
+MinimumBalanceError — raised specifically for savings accounts when a withdrawal would breach the minimum balance threshold. Message should include the minimum balance required and the current balance.
+OverdraftLimitError — raised when a current account withdrawal would exceed the overdraft limit. Message should include the limit and how much was attempted.
+
+security.py — Full Instructions
+This file uses Python's built-in hashlib module — no installation needed.
+hash_pin(pin) — takes a PIN as a string or integer, converts to string, encodes to bytes and returns a SHA-256 hash as a hex string. This is what gets stored in JSON instead of the raw PIN.
+verify_pin(entered_pin, stored_hash) — takes the PIN the user just typed and the hash stored on the account. Hashes the entered PIN using the same method and compares the two hashes. Returns True if they match, False otherwise. Never compare raw PINs — always compare hashes.
+validate_pin_format(pin) — takes a raw PIN input and validates it is exactly 4 digits, all numeric. Returns True or False. Used in account creation before hashing.
+
+utils.py — Full Instructions
+format_currency(amount) — takes a float and returns a string formatted as currency with two decimal places and a € symbol. Handles negative amounts correctly for overdraft display.
+format_date(dt) — takes a datetime object and returns a clean readable string like "20 March 2025 at 14:32".
+format_account_number(account_number) — takes the full account number string and returns a masked version showing only the last 4 digits for security display, like "****7842".
+format_statement_line(transaction) — takes a Transaction object and returns a single formatted line suitable for printing in a bank statement. Fixed-width columns for date, type, amount and balance.
+
+models/transaction.py — Full Instructions
+Class: Transaction
+Class variable: _id_counter starting at 1. Increments with every new Transaction so each gets a unique ID.
+__init__(self, transaction_type, amount, description, balance_after)
+
+transaction_id — assigned from _id_counter, then counter increments
+transaction_type — string: one of "deposit", "withdrawal", "transfer_in", "transfer_out", "interest", "fee"
+amount — float, always stored as positive regardless of direction
+description — string explaining what the transaction was
+balance_after — the account balance immediately after this transaction completed
+timestamp — set automatically to datetime.now() inside __init__, never passed in
+
+__str__ — returns a single formatted line showing all key fields. Use format_statement_line from utils.py.
+__repr__ — returns a technical representation including the transaction ID and type.
+to_dict() — converts all attributes to a dictionary for JSON serialisation. Convert the datetime timestamp to an ISO format string using .isoformat().
+from_dict(data) — classmethod — takes a dictionary and reconstructs a Transaction object. Converts the ISO string back to a datetime object. This is how you restore transactions when loading from JSON.
+
+models/account.py — Full Instructions
+Class: BankAccount
+Class variable: _account_counter starting at 10000000. Every new account gets the next number. Increment inside __init__.
+Private attributes using name mangling:
+
+__balance — never accessible directly from outside
+__pin_hash — stores the hashed PIN, never the raw PIN
+__account_number — assigned from class counter
+
+__init__(self, owner_name, pin)
+
+Validates PIN format using validate_pin_format from security.py — raise ValueError if invalid
+Hashes the PIN immediately using hash_pin and stores the hash
+Sets __balance to 0.0
+Sets owner_name as a public attribute
+Initialises transaction_history as an empty list
+Sets created_date to today
+Increments the class counter
+
+_verify_pin(self, pin) — protected method (single underscore). Calls verify_pin from security.py. Raises AuthenticationError if wrong. This is called internally by every method that requires authentication.
+get_balance(self, pin) — calls _verify_pin, then returns __balance.
+get_account_number(self) — returns the masked account number using format_account_number from utils.py. Never returns the raw number directly.
+deposit(self, amount, pin, description="")
+
+Calls _verify_pin
+Validates amount is a positive number — raise ValueError if not
+Adds amount to __balance
+Creates a Transaction object with type "deposit" and the new balance
+Appends transaction to transaction_history
+Returns the new balance
+
+withdraw(self, amount, pin, description="")
+
+Calls _verify_pin
+Validates amount is positive
+Checks sufficient funds — raise InsufficientFundsError if __balance - amount < 0
+Subtracts from __balance
+Creates a Transaction and appends it
+Returns the new balance
+
+get_statement(self, last_n=10) — prints a formatted bank statement header followed by the last n transactions. Uses format_currency and format_date from utils.py.
+__str__ — returns masked account number and owner name only. Never reveals balance without PIN.
+__repr__ — returns account type, masked number and owner.
+__len__ — returns the number of transactions in history.
+to_dict(self, pin) — requires PIN verification. Returns a dictionary of all serialisable attributes including the hashed PIN and all transactions serialised via their own to_dict() methods.
+
+models/savings_account.py — Full Instructions
+Class: SavingsAccount(BankAccount)
+__init__(self, owner_name, pin, interest_rate=0.03, minimum_balance=100.0)
+
+Calls super().__init__(owner_name, pin)
+Sets interest_rate — stored as a decimal (0.03 = 3%)
+Sets minimum_balance — withdrawals cannot take balance below this
+
+withdraw(self, amount, pin, description="") — override
+
+Calls _verify_pin
+Checks that current_balance - amount >= minimum_balance — raise MinimumBalanceError if not
+Otherwise calls super().withdraw(amount, pin, description) to reuse base logic
+
+apply_interest(self, pin)
+
+Calls _verify_pin
+Calculates interest as current_balance * interest_rate
+Calls self.deposit() with the interest amount and description "Monthly interest"
+Returns the interest amount applied
+
+calculate_projected_balance(self, months, pin)
+
+Calls _verify_pin
+Uses compound interest formula: balance * (1 + rate) ** months
+Does NOT modify any attribute — purely calculative
+Returns the projected balance as a float
+
+__str__ — override to add interest rate to the display.
+
+models/current_account.py — Full Instructions
+Class: CurrentAccount(BankAccount)
+__init__(self, owner_name, pin, overdraft_limit=500.0, overdraft_fee=15.0)
+
+Calls super().__init__(owner_name, pin)
+Sets overdraft_limit — how far into negative the account can go
+Sets overdraft_fee — charged every time a withdrawal takes balance negative
+
+withdraw(self, amount, pin, description="") — override
+
+Calls _verify_pin
+Gets current balance
+Checks that balance - amount >= -overdraft_limit — raise OverdraftLimitError if it would exceed
+Subtracts amount from balance by calling the parent's internal logic or managing balance directly
+If the new balance is negative, automatically charges the overdraft fee by creating an additional Transaction of type "fee"
+Returns new balance
+
+direct_debit(self, amount, payee, pin)
+
+Calls _verify_pin
+Calls self.withdraw() with the payee name included in the description string
+Returns the new balance
+
+__str__ — override to add overdraft limit to the display.
+
+models/bank.py — Full Instructions
+Class: Bank
+__init__(self, name)
+
+name — the bank's name
+_accounts — private dictionary keyed by raw account number (only the bank itself needs the raw number internally), values are account objects
+created_date — today's date
+
+create_savings_account(self, owner_name, pin)
+
+Creates a new SavingsAccount object
+Adds it to _accounts using its account number as key
+Returns the new account object
+
+create_current_account(self, owner_name, pin)
+
+Same pattern for CurrentAccount
+
+_find_account(self, account_number) — private method
+
+Looks up account in _accounts dictionary
+Raises AccountNotFoundError if not found
+Returns the account object
+
+deposit(self, account_number, amount, pin)
+
+Calls _find_account
+Calls account.deposit(amount, pin)
+Returns new balance
+
+withdraw(self, account_number, amount, pin)
+
+Same pattern
+
+transfer(self, from_number, to_number, amount, pin)
+
+Finds both accounts
+Withdraws from source — if this raises any exception, stop immediately and let the exception propagate, nothing has changed
+Deposits to destination with description noting the transfer source
+If the deposit somehow fails after withdrawal succeeded, deposit the money back to the source account as a rollback
+Creates transactions of type "transfer_out" on source and "transfer_in" on destination
+Returns a tuple of both new balances
+
+get_balance(self, account_number, pin)
+
+Finds account and returns balance
+
+get_statement(self, account_number, pin)
+
+Finds account and calls its get_statement() method
+
+apply_monthly_interest(self, pin)
+
+Loops through all accounts
+Calls apply_interest() only on SavingsAccount instances — check with isinstance()
+Returns a summary of interest applied to each savings account
+
+total_assets(self) — no PIN required, this is an internal bank metric
+
+Sums all account balances including negative ones
+Returns the total
+
+__len__ — returns number of accounts.
+save_to_json(self, filepath="data/bank.json")
+
+Serialises the entire bank — note this requires PINs for to_dict() which creates a design challenge. Solve this by having an internal _to_dict_internal() method on accounts that serialises without PIN verification, used only by the bank's own save method. This is a realistic pattern — the bank itself is trusted to access its own data.
+
+load_from_json(self, filepath="data/bank.json")
+
+Loads the JSON file
+Reconstructs each account using from_dict() classmethods
+Repopulates _accounts
+
+
+models/init.py — Full Instructions
+Import all four model classes so the rest of the project can do:
+pythonfrom models import BankAccount, SavingsAccount, CurrentAccount, Bank, Transaction
+Rather than importing from individual subfiles every time.
+
+main.py — Full Instructions
+Instantiate one Bank object on startup and load from JSON if the file exists. The menu should have these options:
+1. Create savings account
+2. Create current account
+3. Deposit
+4. Withdraw
+5. Transfer between accounts
+6. Check balance
+7. View statement
+8. Apply monthly interest (savings accounts)
+9. View bank total assets
+0. Quit
+Every operation that can raise a custom exception should be wrapped in a try/except that catches each specific exception type and prints a clear user-friendly message — never let a raw exception traceback reach the user. Save to JSON on every operation that changes state and on exit.
+
+Build Order
+Build in strictly this order and test each file before moving to the next:
+1. exceptions.py        — no dependencies
+2. security.py          — no dependencies  
+3. utils.py             — no dependencies
+4. transaction.py       — imports datetime only
+5. account.py           — imports transaction, exceptions, security, utils
+6. savings_account.py   — imports account
+7. current_account.py   — imports account
+8. bank.py              — imports all account types
+9. __init__.py          — imports from all models
+10. main.py             — imports everything
