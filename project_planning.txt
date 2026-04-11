@@ -72,6 +72,7 @@ to_dict() — converts all attributes to a dictionary for JSON serialisation. Co
 from_dict(data) — classmethod — takes a dictionary and reconstructs a Transaction object. Converts the ISO string back to a datetime object. This is how you restore transactions when loading from JSON.
 
 models/account.py — Full Instructions
+
 Class: BankAccount
 Class variable: _account_counter starting at 10000000. Every new account gets the next number. Increment inside __init__.
 Private attributes using name mangling:
