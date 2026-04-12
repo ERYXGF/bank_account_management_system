@@ -176,6 +176,7 @@ Returns the new balance
 __str__ — override to add overdraft limit to the display.
 
 models/bank.py — Full Instructions
+
 Class: Bank
 __init__(self, name)
 
