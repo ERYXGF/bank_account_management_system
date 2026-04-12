@@ -119,6 +119,7 @@ __len__ — returns the number of transactions in history.
 to_dict(self, pin) — requires PIN verification. Returns a dictionary of all serialisable attributes including the hashed PIN and all transactions serialised via their own to_dict() methods.
 
 models/savings_account.py — Full Instructions
+
 Class: SavingsAccount(BankAccount)
 __init__(self, owner_name, pin, interest_rate=0.03, minimum_balance=100.0)
 
