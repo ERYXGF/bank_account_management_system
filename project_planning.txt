@@ -150,6 +150,7 @@ Returns the projected balance as a float
 __str__ — override to add interest rate to the display.
 
 models/current_account.py — Full Instructions
+
 Class: CurrentAccount(BankAccount)
 __init__(self, owner_name, pin, overdraft_limit=500.0, overdraft_fee=15.0)
 
